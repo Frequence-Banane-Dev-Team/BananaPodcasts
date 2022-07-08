@@ -1,12 +1,15 @@
 from flask import Flask, request
 from flaskext.mysql import MySQL
 from lxml import etree
-from datetime import date
+from datetime import date, datetime
+from unidecode import unidecode
+import re
+from config import myconfig
 
 app = Flask(__name__)
 mysql = MySQL()
 
-
+myconfig(app)
 mysql.init_app(app)
 
 ITUNES_NAMESPACE = "http://www.itunes.com/dtds/podcast-1.0.dtd"
@@ -17,6 +20,62 @@ NSMAP = {"itunes" : ITUNES_NAMESPACE}
 def hello():
     return 'Hello, World!'
 
+
+
+def encode_string_for_filename(title):
+    title = unidecode(title).lower() #Essaye d'enlever les caracteres non ascii et les remplace par quelque chose proche puis met tout en minuscule
+    title = re.sub("[:\s`',;_-]+",  '-',    title) #Remplace une partie de la ponctuation par un tiret unique
+    title = re.sub("[^a-zA-Z-]+",  '',    title) #enleve tout ce qui n'est ni une lettre a-z ou A-Z ou un tiret
+    title = re.sub("^[-]+|[-]+$",  '',    title) #S'assure que le titre ne finit , ni ne commence par un tiret
+    return title
+
+@app.route('/upload', methods=['POST', 'GET'])
+def upload():
+
+    if request.method == 'GET':
+        return "Oui bonjour ?", 200
+    else:
+
+        keys = ['ep_title', 'ep_description', 'ep_keywords', 'is_fully_owned', 'ep_date', 'is_explicit', 'show_id']
+        keys_types = [str, str, str, int, str, int, int]
+        if False in list( map(request.form.__contains__, keys) ): #Verifie que chacune des clefs existe dans le dictionnaire qui contient les données envoyés par l'utilisateur
+            return "Valeur manquante", 400
+
+        form_data = {}
+        for key, key_type in zip(keys, keys_types):
+            form_data[key] = request.form.get(key, type=key_type)#recupere les données envoyés par l'utilisateur (contenu dans le dictionnaire request.form)
+            
+        
+        form_data['encoded_title'] = encode_string_for_filename(form_data['ep_title'])
+
+        keys.append('encoded_title') #On modifie la valeur keys pour prendre en compte les nouveaux champs, + pour rajouter ce dont on a besoin
+        keys_types.append(str)
+
+        for key in keys: #Verifie que tout les elements respectent les contraintes Not Null, et que le champ ne soit pas juste vide
+            if form_data[key] == None or (type(form_data[key])==str  and len(form_data[key]) < 1):
+                return "Valeur incorrecte, aucun champ ne peut être vide", 400
+
+        try:
+            datetime.strptime(form_data['ep_date'], '%Y-%m-%d') #On verifie le format de la date pour etre YYYY-MM-DD
+        except ValueError:
+            return "Format de date non correct", 400
+
+
+        form_data['file_length'] = 0
+        form_data['image'] = 0
+        keys.append('file_length')
+        keys.append('image')
+        print(keys)
+
+        conn = mysql.connect()
+        cursor =conn.cursor()
+        
+        cursor.execute("INSERT INTO Episodes (Episodes.Title, Episodes.Description, Episodes.Keywords, Episodes.Is_fully_owned, Episodes.Date, Episodes.Is_explicit, Episodes.Show, Episodes.Encoded_title, Episodes.File_length, Episodes.image) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);", tuple(map(form_data.get, keys)) )
+        conn.commit()
+        return form_data['encoded_title'], 200
+
+
+#Genere un fichier xml pour un podcast spécifique (dont l'idée est précisé dans l'URL) supporte le parametre "is_fully_owned" qui determine si le fichier contient exclusivement les podcasts dont nous possédons 100% des droits
 @app.route('/xml/<int:show_id>')
 def generate_xml(show_id):
     #Open database
@@ -82,16 +141,6 @@ def generate_xml(show_id):
             ep_data = cursor.fetchone()
 
  
-    
-    """
-    data = cursor.fetchone()
-    while data is not None:
-        filename = str(data[0]) + "-" + data[1] + "-" + data[2].strftime('%d/%m/%Y')
-        item = etree.SubElement(episodes, "item")
-        item.text = filename
-        data = cursor.fetchone()
-
-    """
     xml_res = etree.tostring(rss, pretty_print=True, xml_declaration=True, encoding="utf-8")
     return xml_res, 200, {'Content-Type': 'text/xml; charset=utf-8'}
 
