@@ -4,8 +4,11 @@ from lxml import etree
 from datetime import date, datetime
 from unidecode import unidecode
 import re
-from config import myconfig
 import os
+
+
+from config import myconfig
+
 
 app = Flask(__name__)
 mysql = MySQL()
@@ -92,7 +95,7 @@ def upload():
         filename = filename_data[1] + "-" + str(filename_data[2]) + "-" + filename_data[4] + "-" + filename_data[5].strftime('%Y_%m_%d') + ".mp3"
         print(filename)
 
-        folder_path = os.path.join('var/www/podcasts', filename_data[0], filename_data[1])
+        folder_path = os.path.join('/var/www/media', filename_data[0], filename_data[1])
         print(folder_path)
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
