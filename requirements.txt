@@ -1,0 +1,6 @@
+flask
+gunicorn
+flask-mysql
+lxml
+unidecode
+cryptography

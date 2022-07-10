@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Formulaire d'upload</title>
+</head>
+<body>
+    <h2>Bienvenue sur le formulaire d'upload !</h2>
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+        <ul class=flashes>
+        {% for message in messages %}
+            <li>{{ message }}</li>
+        {% endfor %}
+        </ul>
+    {% endif %}
+    {% endwith %}
+    <form action="/upload" method="post" enctype=multipart/form-data>
+        <input type="text" name="ep_title" placeholder="Titre de l'épisode"><br>
+        <textarea name="ep_description" placeholder="Description de l'épisode"></textarea><br>
+        <textarea name="ep_keywords" placeholder="Mot clés, séparés par une virgule. Exemple : banane,métallique,rose,all,school,allschool"></textarea><br>
+
+        <input type="hidden" name="is_fully_owned" value="0"><input type="checkbox" onclick="this.previousSibling.value=1-this.previousSibling.value">
+        <label for="is_fully_owned"> Je possède tout les droits de ce podcast</label><br>
+
+        <input type="date" name="ep_date"><br>
+
+        <input type="hidden" name="is_explicit" value="0"><input type="checkbox" onclick="this.previousSibling.value=1-this.previousSibling.value">
+        <label for="is_explicit">Ce podcast contient du contenu inadapté au jeune public</label><br>
+
+        <label for="show_id">Podcast dont fait parti l'épisode :</label>
+        <select name="show_id">
+            <option value="1">Banane Rose</option>
+            <option value="2">Café Kawa</option>
+            <option value="3">Down There Sessions</option>
+            <option value="4">Banane Métallique</option>
+        </select><br>
+        <input type=file name=file><br>
+        <input type="submit" name="">
+    </form>
+</body>
+</html>
