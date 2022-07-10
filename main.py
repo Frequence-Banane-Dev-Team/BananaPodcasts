@@ -161,7 +161,7 @@ def generate_xml(show_id):
             ep_pubDate = etree.SubElement(item, "pubDate")
             ep_pubDate.text = ep_data[6].strftime('%d %b %Y')
             ep_enclosure = etree.SubElement(item, "enclosure")
-            url = "https://podcasts.frequencebanane.ch/media/" + show_data[1] + "/" +show_data[4] + "/" + show_data[4] + "-" + str(ep_data[0]) + "-" + ep_data[2] + "-" + ep_data[6].strftime('%d-%m-%Y') + ".mp3"
+            url = "https://podcasts.frequencebanane.ch/media/" + show_data[1] + "/" +show_data[4] + "/" + show_data[4] + "-" + str(ep_data[0]) + "-" + ep_data[2] + "-" + ep_data[6].strftime('%Y_%m_%d') + ".mp3"
             ep_enclosure.set("url", url)
             ep_guid = etree.SubElement(item, "guid")
             ep_guid.set("isPermaLink", "true")
