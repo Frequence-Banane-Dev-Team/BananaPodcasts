@@ -1,10 +1,11 @@
-from flask import Flask, request
+from flask import Flask, request, render_template, flash, redirect, url_for
 from flaskext.mysql import MySQL
 from lxml import etree
 from datetime import date, datetime
 from unidecode import unidecode
 import re
 from config import myconfig
+import os
 
 app = Flask(__name__)
 mysql = MySQL()
@@ -24,8 +25,8 @@ def hello():
 
 def encode_string_for_filename(title):
     title = unidecode(title).lower() #Essaye d'enlever les caracteres non ascii et les remplace par quelque chose proche puis met tout en minuscule
-    title = re.sub("[:\s`',;_-]+",  '-',    title) #Remplace une partie de la ponctuation par un tiret unique
-    title = re.sub("[^a-zA-Z-]+",  '',    title) #enleve tout ce qui n'est ni une lettre a-z ou A-Z ou un tiret
+    title = re.sub("[:\s`',;-]+",  '_',    title) #Remplace une partie de la ponctuation par un tiret unique
+    title = re.sub("[^a-zA-Z_]+",  '',    title) #enleve tout ce qui n'est ni une lettre a-z ou A-Z ou un tiret
     title = re.sub("^[-]+|[-]+$",  '',    title) #S'assure que le titre ne finit , ni ne commence par un tiret
     return title
 
@@ -33,13 +34,15 @@ def encode_string_for_filename(title):
 def upload():
 
     if request.method == 'GET':
-        return "Oui bonjour ?", 200
+        return render_template('upload.html')
     else:
 
         keys = ['ep_title', 'ep_description', 'ep_keywords', 'is_fully_owned', 'ep_date', 'is_explicit', 'show_id']
-        keys_types = [str, str, str, int, str, int, int]
+
+        keys_types = [str, str, str, bool, str, bool, int]
         if False in list( map(request.form.__contains__, keys) ): #Verifie que chacune des clefs existe dans le dictionnaire qui contient les données envoyés par l'utilisateur
-            return "Valeur manquante", 400
+            flash('Champ manquant !')
+            return redirect(url_for('upload'))
 
         form_data = {}
         for key, key_type in zip(keys, keys_types):
@@ -53,14 +56,25 @@ def upload():
 
         for key in keys: #Verifie que tout les elements respectent les contraintes Not Null, et que le champ ne soit pas juste vide
             if form_data[key] == None or (type(form_data[key])==str  and len(form_data[key]) < 1):
-                return "Valeur incorrecte, aucun champ ne peut être vide", 400
+                flash('Valeur incorrecte, aucun champ ne peut être vide !')
+                return redirect(url_for('upload'))
 
         try:
             datetime.strptime(form_data['ep_date'], '%Y-%m-%d') #On verifie le format de la date pour etre YYYY-MM-DD
         except ValueError:
-            return "Format de date non correct", 400
+           flash('Format de date non correct !')
+           return redirect(url_for('upload'))
 
-
+        if 'file' not in request.files:
+           flash('Fichier manquant !')
+           return redirect(url_for('upload')) 
+        
+        file = request.files['file']
+        if file.filename == '' or file.filename.rsplit('.', 1)[1].lower() != 'mp3':
+           flash('Fichier vide ou format de fichier incorrect (.mp3 seulement)!')
+           return redirect(url_for('upload'))
+         
+        
         form_data['file_length'] = 0
         form_data['image'] = 0
         keys.append('file_length')
@@ -72,7 +86,20 @@ def upload():
         
         cursor.execute("INSERT INTO Episodes (Episodes.Title, Episodes.Description, Episodes.Keywords, Episodes.Is_fully_owned, Episodes.Date, Episodes.Is_explicit, Episodes.Show, Episodes.Encoded_title, Episodes.File_length, Episodes.image) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);", tuple(map(form_data.get, keys)) )
         conn.commit()
-        return form_data['encoded_title'], 200
+
+        cursor.execute("SELECT *  FROM (SELECT un.Encoded_name, sh.Encoded_title as sh_title, row_number() over (order by ep.ID) as ep_rn, ep.ID, ep.Encoded_title, ep.Date FROM Episodes ep, Shows sh, Units un WHERE ep.`Show` = sh.ID and sh.ID =%s) output_tb where output_tb.ID = %s", (form_data['show_id'] ,cursor.lastrowid))
+        filename_data = cursor.fetchone()
+        filename = filename_data[1] + "-" + str(filename_data[2]) + "-" + filename_data[4] + "-" + filename_data[5].strftime('%Y_%m_%d') + ".mp3"
+        print(filename)
+
+        folder_path = os.path.join('var/www/podcasts', filename_data[0], filename_data[1])
+        print(folder_path)
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+        
+        file.save(os.path.join(folder_path, filename))
+        flash('Podcast uploadé avec succès !')
+        return redirect(url_for('upload'))
 
 
 #Genere un fichier xml pour un podcast spécifique (dont l'idée est précisé dans l'URL) supporte le parametre "is_fully_owned" qui determine si le fichier contient exclusivement les podcasts dont nous possédons 100% des droits
