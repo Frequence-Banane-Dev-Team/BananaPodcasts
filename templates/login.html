@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Formulaire d'upload</title>
+</head>
+<body>
+    <h2>Bienvenue sur le formulaire d'upload !</h2>
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+        <ul class=flashes>
+        {% for message in messages %}
+            <li>{{ message }}</li>
+        {% endfor %}
+        </ul>
+    {% endif %}
+    {% endwith %}
+    <form action="/login" method="post" enctype=multipart/form-data>
+        <input type="text" name="username" placeholder="Utilisateur"><br>
+        <input type="text" name="password" placeholder="Mot de passe"><br>
+        <input type="submit" name="">
+    </form>
+</body>
+</html>
