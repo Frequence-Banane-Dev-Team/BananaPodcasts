@@ -28,13 +28,15 @@
         <input type="hidden" name="is_explicit" value="0"><input type="checkbox" onclick="this.previousSibling.value=1-this.previousSibling.value">
         <label for="is_explicit">Ce podcast contient du contenu inadapté au jeune public</label><br>
 
+        <!--
         <label for="show_id">Podcast dont fait parti l'épisode :</label>
         <select name="show_id">
             <option value="1">Banane Rose</option>
             <option value="2">Café Kawa</option>
             <option value="3">Down There Sessions</option>
             <option value="4">Banane Métallique</option>
-        </select><br>
+        </select><br> -->
+        <input type="hidden" name="show_id" value="1">
         <input type=file name=file><br>
         <input type="submit" name="">
     </form>

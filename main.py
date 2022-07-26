@@ -125,11 +125,13 @@ def logout():
     return "Vous êtes désormais déconnecté"
 
 @app.route('/upload', methods=['POST', 'GET'])
+@auth_required
 def upload():
 
     if request.method == 'GET':
         return render_template('upload.html')
     else:
+        
 
         keys = ['ep_title', 'ep_description', 'ep_keywords', 'is_fully_owned', 'ep_date', 'is_explicit', 'show_id']
 
@@ -143,6 +145,16 @@ def upload():
             form_data[key] = request.form.get(key, type=key_type)#recupere les données envoyés par l'utilisateur (contenu dans le dictionnaire request.form)
             
         
+        #On verifie si l'utilisateur à les droits sur le podcast 
+        conn = mysql.connect()
+        cursor =conn.cursor()
+        cursor.execute("SELECT sh.ID, rt.Level FROM Shows sh, Rights rt WHERE rt.User=%s and sh.ID=%s and rt.Unit=sh.Unit and rt.Level <= 0",(session['ID'], form_data['show_id']) )
+        if cursor.fetchone() is None:
+            flash("Vous n'avez pas les droits sur ce podcast !")
+            return redirect(url_for('upload')) #TODO : rediriger vers la page avec la liste des podcasts plutot
+
+
+
         form_data['encoded_title'] = encode_string_for_filename(form_data['ep_title'])
 
         keys.append('encoded_title') #On modifie la valeur keys pour prendre en compte les nouveaux champs, + pour rajouter ce dont on a besoin
@@ -175,13 +187,11 @@ def upload():
         keys.append('image')
         print(keys)
 
-        conn = mysql.connect()
-        cursor =conn.cursor()
         
         cursor.execute("INSERT INTO Episodes (Episodes.Title, Episodes.Description, Episodes.Keywords, Episodes.Is_fully_owned, Episodes.Date, Episodes.Is_explicit, Episodes.Show, Episodes.Encoded_title, Episodes.File_length, Episodes.image) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);", tuple(map(form_data.get, keys)) )
         conn.commit()
 
-        cursor.execute("SELECT *  FROM (SELECT un.Encoded_name, sh.Encoded_title as sh_title, row_number() over (order by ep.ID) as ep_rn, ep.ID, ep.Encoded_title, ep.Date FROM Episodes ep, Shows sh, Units un WHERE ep.`Show` = sh.ID and sh.Units=un.ID and sh.ID =%s) output_tb where output_tb.ID = %s", (form_data['show_id'] ,cursor.lastrowid))
+        cursor.execute("SELECT *  FROM (SELECT un.Encoded_name, sh.Encoded_title as sh_title, row_number() over (order by ep.ID) as ep_rn, ep.ID, ep.Encoded_title, ep.Date FROM Episodes ep, Shows sh, Units un WHERE ep.`Show` = sh.ID and sh.Unit=un.ID and sh.ID =%s) output_tb where output_tb.ID = %s", (form_data['show_id'] ,cursor.lastrowid))
         filename_data = cursor.fetchone()
         filename = filename_data[1] + "-" + str(filename_data[2]) + "-" + filename_data[4] + "-" + filename_data[5].strftime('%Y_%m_%d') + ".mp3"
         print(filename)
@@ -216,7 +226,7 @@ def generate_xml(show_id):
     cursor =conn.cursor()
 
     #On execute la requete dans la base de donnée 
-    cursor.execute("SELECT un.Name, un.Encoded_name,un.Email, sh.Title, sh.Encoded_title, sh.Description, sh.Language FROM Units un, Shows sh WHERE sh.Units=un.ID and sh.ID=%s", (show_id))
+    cursor.execute("SELECT un.Name, un.Encoded_name,un.Email, sh.Title, sh.Encoded_title, sh.Description, sh.Language FROM Units un, Shows sh WHERE sh.Unit=un.ID and sh.ID=%s", (show_id))
     show_data = cursor.fetchone()
 
     #On crée l'element xml de base 
@@ -261,9 +271,10 @@ def generate_xml(show_id):
             ep_description = etree.SubElement(item, "description")
             ep_description = ep_data[3]
             ep_pubDate = etree.SubElement(item, "pubDate")
-            ep_pubDate.text = ep_data[6].strftime('%d %b %Y')
+            #ep_pubDate.text = ep_data[6].strftime('%d %b %Y')
+            ep_pubDate.text = ep_data[6].strftime('%a, %d %b %Y %I:%M:%S') + " +0200"
             ep_enclosure = etree.SubElement(item, "enclosure")
-            url = "https://podcasts.frequencebanane.ch/media/" + show_data[1] + "/" +show_data[4] + "/" + str(ep_data[0]) + "-" + ep_data[2] + "-" + ep_data[6].strftime('%d-%m-%Y') + ".mp3"
+            url = "https://podcasts.frequencebanane.ch/media/" + show_data[1] + "/" +show_data[4] + "/" + show_data[4] + "-" + str(ep_data[0]) + "-" + ep_data[2] + "-" + ep_data[6].strftime('%Y_%m_%d') + ".mp3"
             ep_enclosure.set("url", url)
             ep_guid = etree.SubElement(item, "guid")
             ep_guid.set("isPermaLink", "true")
