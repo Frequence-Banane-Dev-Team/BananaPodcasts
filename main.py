@@ -1,8 +1,10 @@
-from flask import Flask, request, render_template, flash, redirect, url_for
+from flask import Flask, request, session, render_template, flash, redirect, url_for
 from flaskext.mysql import MySQL
 from lxml import etree
 from datetime import date, datetime
+from functools import wraps
 from unidecode import unidecode
+import hashlib
 import re
 import os
 
@@ -16,22 +18,111 @@ mysql = MySQL()
 myconfig(app)
 mysql.init_app(app)
 
+
+
+"""
+Namespace utilisé pour générer le flux rss.
+Voir : https://en.wikipedia.org/wiki/XML_namespace
+
+
+"""
 ITUNES_NAMESPACE = "http://www.itunes.com/dtds/podcast-1.0.dtd"
 ITUNES = "{%s}" % ITUNES_NAMESPACE
 NSMAP = {"itunes" : ITUNES_NAMESPACE}
 
-@app.route('/')
-def hello():
-    return 'Hello, World!'
 
+"""
+
+
+
+    Fonctions utilitaires
+
+
+
+"""
+
+def auth_required(f):
+    @wraps(f)
+    def decorator(*args, **kwargs):
+        if 'username' in session:
+            return f(*args, **kwargs)
+        else:
+            return redirect(url_for('login'))
+
+    return decorator
 
 
 def encode_string_for_filename(title):
+    """
+    Encode une chaîne de caractère dans un certains format pour s'assurer qu'il n'y aura pas de probleme en les manipulant (par exemple dans les urls ou le nom de fichier)
+    Les caractères non ASCII sont remplacés par des caractères équivalent et la ponctuation et les espaces par des tirets.
+
+    Args:
+        title : La chaîne de caractère que l'on souhaite formatter
+
+    Return:
+        La chaine de caractère formatée 
+
+
+    """
     title = unidecode(title).lower() #Essaye d'enlever les caracteres non ascii et les remplace par quelque chose proche puis met tout en minuscule
     title = re.sub("[:\s`',;-]+",  '_',    title) #Remplace une partie de la ponctuation par un tiret unique
     title = re.sub("[^a-zA-Z_]+",  '',    title) #enleve tout ce qui n'est ni une lettre a-z ou A-Z ou un tiret
     title = re.sub("^[-]+|[-]+$",  '',    title) #S'assure que le titre ne finit , ni ne commence par un tiret
     return title
+
+
+"""
+
+
+    Routes flask
+
+
+"""
+
+@app.route('/')
+@auth_required
+def hello():
+    """
+    C'est important de dire bonjour, c'est VALD qui me l'a appris
+
+     """
+    return "Bonjour " + session['username'] + " !"
+
+
+
+@app.route('/login', methods=['POST', 'GET'])
+def login():
+    if request.method == 'GET':
+        return render_template('login.html')
+    else:
+        if 'username' in request.form and 'password' in request.form:
+            conn = mysql.connect()
+            cursor =conn.cursor()
+            cursor.execute("SELECT Salt FROM Users WHERE Username = %s", (request.form['username']))
+            data = cursor.fetchone()
+            if data is None:
+                return  "Pas d'utilisateur correspondant"
+
+            salt = data[0].encode()
+            password = request.form['password'].encode()
+            hashed_password = hashlib.sha512(password + salt).hexdigest()
+
+            cursor.execute("SELECT ID, Username FROM Users WHERE Username = %s and Password = %s", (request.form['username'], hashed_password))
+            data = cursor.fetchone()
+            if data is None:
+                return  "Mot de passe incorrect"
+
+            session['ID'] = data[0]
+            session['username'] = data[1]
+
+            return "Vous êtes désormais connectés "
+
+
+@app.route('/logout', methods=['GET'])
+def logout():
+    session.pop('username', None)
+    return "Vous êtes désormais déconnecté"
 
 @app.route('/upload', methods=['POST', 'GET'])
 def upload():
@@ -90,7 +181,7 @@ def upload():
         cursor.execute("INSERT INTO Episodes (Episodes.Title, Episodes.Description, Episodes.Keywords, Episodes.Is_fully_owned, Episodes.Date, Episodes.Is_explicit, Episodes.Show, Episodes.Encoded_title, Episodes.File_length, Episodes.image) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);", tuple(map(form_data.get, keys)) )
         conn.commit()
 
-        cursor.execute("SELECT *  FROM (SELECT un.Encoded_name, sh.Encoded_title as sh_title, row_number() over (order by ep.ID) as ep_rn, ep.ID, ep.Encoded_title, ep.Date FROM Episodes ep, Shows sh, Units un WHERE ep.`Show` = sh.ID and sh.ID =%s) output_tb where output_tb.ID = %s", (form_data['show_id'] ,cursor.lastrowid))
+        cursor.execute("SELECT *  FROM (SELECT un.Encoded_name, sh.Encoded_title as sh_title, row_number() over (order by ep.ID) as ep_rn, ep.ID, ep.Encoded_title, ep.Date FROM Episodes ep, Shows sh, Units un WHERE ep.`Show` = sh.ID and sh.Units=un.ID and sh.ID =%s) output_tb where output_tb.ID = %s", (form_data['show_id'] ,cursor.lastrowid))
         filename_data = cursor.fetchone()
         filename = filename_data[1] + "-" + str(filename_data[2]) + "-" + filename_data[4] + "-" + filename_data[5].strftime('%Y_%m_%d') + ".mp3"
         print(filename)
@@ -105,19 +196,30 @@ def upload():
         return redirect(url_for('upload'))
 
 
-#Genere un fichier xml pour un podcast spécifique (dont l'idée est précisé dans l'URL) supporte le parametre "is_fully_owned" qui determine si le fichier contient exclusivement les podcasts dont nous possédons 100% des droits
+
 @app.route('/xml/<int:show_id>')
+
 def generate_xml(show_id):
-    #Open database
+    """
+    Genere un fichier xml pour un podcast spécifique (dont l'idée est précisé dans l'URL).
+    Supporte le parametre "is_fully_owned" qui determine si le fichier contient exclusivement les podcasts dont nous possédons 100% des droits
+
+    La generation du fichier XML contenant le flux RSS du podcast suit les recommandations de google disponibles ici :
+    https://support.google.com/podcast-publishers/answer/9889544?hl=fr
+
+    Le namespace d'Itunes est utilisé, voir sa définition en haut du code, en variable globale 
+
+    """
+    #On ouvre la base de donnée
     print(type(show_id))
     conn = mysql.connect()
     cursor =conn.cursor()
 
-    #Execute SQL query to database
+    #On execute la requete dans la base de donnée 
     cursor.execute("SELECT un.Name, un.Encoded_name,un.Email, sh.Title, sh.Encoded_title, sh.Description, sh.Language FROM Units un, Shows sh WHERE sh.Units=un.ID and sh.ID=%s", (show_id))
     show_data = cursor.fetchone()
 
-    #Create XML element
+    #On crée l'element xml de base 
     rss = etree.Element("rss", nsmap=NSMAP)
     rss.set("version", "2.0")
     channel = etree.SubElement(rss, "channel")
