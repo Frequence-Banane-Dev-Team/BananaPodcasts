@@ -102,7 +102,8 @@ def login():
             cursor.execute("SELECT Salt FROM Users WHERE Username = %s", (request.form['username']))
             data = cursor.fetchone()
             if data is None:
-                return  "Pas d'utilisateur correspondant"
+                flash('Identifiants / Mot de passe incorrect !', 'danger')
+                redirect(url_for('login'))
 
             salt = data[0].encode()
             password = request.form['password'].encode()
@@ -111,18 +112,21 @@ def login():
             cursor.execute("SELECT ID, Username FROM Users WHERE Username = %s and Password = %s", (request.form['username'], hashed_password))
             data = cursor.fetchone()
             if data is None:
-                return  "Mot de passe incorrect"
+                flash('Identifiants / Mot de passe incorrect !', 'danger')
+                redirect(url_for('login'))
 
             session['ID'] = data[0]
             session['username'] = data[1]
 
-            return "Vous êtes désormais connectés "
+            flash('Vous êtes désormais connecté !', 'success')
+            return redirect(url_for('upload'))
 
 
 @app.route('/logout', methods=['GET'])
 def logout():
     session.pop('username', None)
-    return "Vous êtes désormais déconnecté"
+    flash('Vous êtes désormais deconnecté !', 'success')
+    return redirect(url_for('login'))
 
 @app.route('/upload', methods=['POST', 'GET'])
 @auth_required
@@ -132,28 +136,30 @@ def upload():
         return render_template('upload.html')
     else:
         
+        redirection_upload_url = url_for('upload', show_id= request.form.get('show_id', default='0'))
 
-        keys = ['ep_title', 'ep_description', 'ep_keywords', 'display_on_third_platforms', 'ep_date', 'is_explicit', 'show_id']
+        keys = ['ep_title', 'ep_description', 'ep_keywords', 'display_on_third_platforms', 'display_on_website', 'ep_date', 'is_explicit', 'show_id' , 'pin']
 
-        keys_types = [str, str, str, bool, str, bool, int]
+        keys_types = [str, str, str, bool, bool, str, bool, int, int]
         if False in list( map(request.form.__contains__, keys) ): #Verifie que chacune des clefs existe dans le dictionnaire qui contient les données envoyés par l'utilisateur
-            flash('Champ manquant !')
-            return redirect(url_for('upload'))
+            flash('Champ manquant !', 'danger')
+            return redirect(redirection_upload_url)
 
         form_data = {}
         for key, key_type in zip(keys, keys_types):
-            form_data[key] = request.form.get(key, type=key_type)#recupere les données envoyés par l'utilisateur (contenu dans le dictionnaire request.form)
+            form_data[key] = request.form.get(key, type=key_type)#recupere les données envoyés par l'utilisateur (contenu dans le dictionnaire request.form) en les formattant dans le bon type de variable
             
         
         #On verifie si l'utilisateur à les droits sur le podcast 
         conn = mysql.connect()
         cursor =conn.cursor()
-        cursor.execute("SELECT sh.ID, rt.Level FROM Shows sh, Rights rt WHERE rt.User=%s and sh.ID=%s and rt.Unit=sh.Unit and rt.Level <= 0",(session['ID'], form_data['show_id']) )
+        cursor.execute("SELECT sh.ID, rt.Level FROM Shows sh, Rights rt WHERE rt.User=%s and sh.ID=%s and rt.Unit=sh.Unit AND( (rt.Level <= 1) OR (rt.Level <= 2 AND (sh.Pin=%s  OR sh.Pin=Null) ) )",(session['ID'], form_data['show_id'], form_data['pin']) )
         if cursor.fetchone() is None:
-            flash("Vous n'avez pas les droits sur ce podcast !")
-            return redirect(url_for('upload')) #TODO : rediriger vers la page avec la liste des podcasts plutot
+            flash("Vous n'avez pas les droits sur ce podcast ou votre code est incorrect !", 'danger')
+            return redirect(redirection_upload_url) #TODO : rediriger vers la page avec la liste des podcasts plutot
 
-
+        keys.pop() #Nous n'avons plus besoin du pin et nous n'allons pas l'insérer dans la base de donnée donc on l'enleve
+        keys_types.pop()
 
         form_data['encoded_title'] = encode_string_for_filename(form_data['ep_title'])
 
@@ -162,23 +168,22 @@ def upload():
 
         for key in keys: #Verifie que tout les elements respectent les contraintes Not Null, et que le champ ne soit pas juste vide
             if form_data[key] == None or (type(form_data[key])==str  and len(form_data[key]) < 1):
-                flash('Valeur incorrecte, aucun champ ne peut être vide !')
-                return redirect(url_for('upload'))
-
+                flash('Valeur incorrecte, aucun champ ne peut être vide !', 'danger')
+                return redirect(redirection_upload_url)
         try:
             datetime.strptime(form_data['ep_date'], '%Y-%m-%d') #On verifie le format de la date pour etre YYYY-MM-DD
         except ValueError:
-           flash('Format de date non correct !')
-           return redirect(url_for('upload'))
+           flash('Format de date non correct !', 'danger')
+           return redirect(redirection_upload_url)
 
         if 'file' not in request.files:
-           flash('Fichier manquant !')
-           return redirect(url_for('upload')) 
+           flash('Fichier manquant !', 'danger')
+           return redirect(redirection_upload_url)
         
         file = request.files['file']
         if file.filename == '' or file.filename.rsplit('.', 1)[1].lower() != 'mp3':
-           flash('Fichier vide ou format de fichier incorrect (.mp3 seulement)!')
-           return redirect(url_for('upload'))
+           flash('Fichier vide ou format de fichier incorrect (.mp3 seulement)!', 'danger')
+           return redirect(redirection_upload_url)
          
         
         form_data['file_length'] = 0
@@ -188,7 +193,7 @@ def upload():
         print(keys)
 
         
-        cursor.execute("INSERT INTO Episodes (Episodes.Title, Episodes.Description, Episodes.Keywords, Episodes.display_on_third_platforms, Episodes.Date, Episodes.Is_explicit, Episodes.Show, Episodes.Encoded_title, Episodes.File_length, Episodes.image) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);", tuple(map(form_data.get, keys)) )
+        cursor.execute("INSERT INTO Episodes (Episodes.Title, Episodes.Description, Episodes.Keywords, Episodes.display_on_third_platforms, Episodes.display_on_website, Episodes.Date, Episodes.Is_explicit, Episodes.Show, Episodes.Encoded_title, Episodes.File_length, Episodes.image) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);", tuple(map(form_data.get, keys)) )
         conn.commit()
 
         cursor.execute("SELECT *  FROM (SELECT un.Encoded_name, sh.Encoded_title as sh_title, row_number() over (order by ep.ID) as ep_rn, ep.ID, ep.Encoded_title, ep.Date FROM Episodes ep, Shows sh, Units un WHERE ep.`Show` = sh.ID and sh.Unit=un.ID and sh.ID =%s) output_tb where output_tb.ID = %s", (form_data['show_id'] ,cursor.lastrowid))
@@ -202,8 +207,8 @@ def upload():
             os.makedirs(folder_path)
         
         file.save(os.path.join(folder_path, filename))
-        flash('Podcast uploadé avec succès !')
-        return redirect(url_for('upload'))
+        flash('Podcast uploadé avec succès !', 'success')
+        return redirect(redirection_upload_url)
 
 
 
@@ -257,19 +262,24 @@ def generate_xml(show_id):
 
 
         #SELECT row_number() over (order by ep.Date) as nbr,ep.Title, ep.Encoded_title, ep.Description, ep.Is_explicit, ep.Is_fully_owned FROM Episodes ep WHERE ep.`Show`=3 AND ep.Is_fully_owned >= 0
-        if request.args.get('display_on_third_platforms', default=True) == True: #Si on demande à ce que le résultat comporte exclusivement des podcasts dont on possède entierement les droits
+        if request.args.get('display_on_third_platforms', default=True, type=lambda v: v == '1') == True: #Si on demande à ce que le résultat comporte exclusivement des podcasts dont on possède entierement les droits, on definit une fonction qui verifie si le parametre est egale à 1 et qui renvoie true si c'est le cas
             display_on_third_platforms = 1
         else:
             display_on_third_platforms = 0
 
-        cursor.execute("SELECT row_number() over (order by ep.Date) as nbr,ep.Title, ep.Encoded_title, ep.Description, ep.Is_explicit, ep.display_on_third_platforms, ep.Date, ep.File_length FROM Episodes ep WHERE ep.`Show`=%s AND ep.display_on_third_platforms >= %s", (show_id, display_on_third_platforms))
+        if request.args.get('display_on_website', default=False, type=lambda v: v == '1') == True: #Si on demande à ce que le résultat comporte seulement les podcasts qui sont disponible sur le site
+            display_on_website = 1
+        else:
+            display_on_website = 0
+
+        cursor.execute("SELECT row_number() over (order by ep.Date) as nbr,ep.Title, ep.Encoded_title, ep.Description, ep.Is_explicit, ep.display_on_third_platforms, ep.Date, ep.File_length FROM Episodes ep WHERE ep.`Show`=%s AND ep.display_on_third_platforms >= %s AND ep.display_on_website >= %s ", (show_id, display_on_third_platforms, display_on_website))
         ep_data = cursor.fetchone()
         while ep_data is not None:
             item = etree.SubElement(channel, "item")
             ep_title = etree.SubElement(item, "title")
             ep_title.text = ep_data[1]
             ep_description = etree.SubElement(item, "description")
-            ep_description = ep_data[3]
+            ep_description.text = ep_data[3]
             ep_pubDate = etree.SubElement(item, "pubDate")
             #ep_pubDate.text = ep_data[6].strftime('%d %b %Y')
             ep_pubDate.text = ep_data[6].strftime('%a, %d %b %Y %I:%M:%S') + " +0200"
