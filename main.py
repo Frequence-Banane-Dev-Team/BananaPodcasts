@@ -133,7 +133,7 @@ def upload():
     else:
         
 
-        keys = ['ep_title', 'ep_description', 'ep_keywords', 'is_fully_owned', 'ep_date', 'is_explicit', 'show_id']
+        keys = ['ep_title', 'ep_description', 'ep_keywords', 'display_on_third_platforms', 'ep_date', 'is_explicit', 'show_id']
 
         keys_types = [str, str, str, bool, str, bool, int]
         if False in list( map(request.form.__contains__, keys) ): #Verifie que chacune des clefs existe dans le dictionnaire qui contient les données envoyés par l'utilisateur
@@ -188,7 +188,7 @@ def upload():
         print(keys)
 
         
-        cursor.execute("INSERT INTO Episodes (Episodes.Title, Episodes.Description, Episodes.Keywords, Episodes.Is_fully_owned, Episodes.Date, Episodes.Is_explicit, Episodes.Show, Episodes.Encoded_title, Episodes.File_length, Episodes.image) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);", tuple(map(form_data.get, keys)) )
+        cursor.execute("INSERT INTO Episodes (Episodes.Title, Episodes.Description, Episodes.Keywords, Episodes.display_on_third_platforms, Episodes.Date, Episodes.Is_explicit, Episodes.Show, Episodes.Encoded_title, Episodes.File_length, Episodes.image) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);", tuple(map(form_data.get, keys)) )
         conn.commit()
 
         cursor.execute("SELECT *  FROM (SELECT un.Encoded_name, sh.Encoded_title as sh_title, row_number() over (order by ep.ID) as ep_rn, ep.ID, ep.Encoded_title, ep.Date FROM Episodes ep, Shows sh, Units un WHERE ep.`Show` = sh.ID and sh.Unit=un.ID and sh.ID =%s) output_tb where output_tb.ID = %s", (form_data['show_id'] ,cursor.lastrowid))
@@ -212,7 +212,7 @@ def upload():
 def generate_xml(show_id):
     """
     Genere un fichier xml pour un podcast spécifique (dont l'idée est précisé dans l'URL).
-    Supporte le parametre "is_fully_owned" qui determine si le fichier contient exclusivement les podcasts dont nous possédons 100% des droits
+    Supporte le parametre "display_on_third_platforms" qui determine si le fichier contient exclusivement les podcasts dont nous possédons 100% des droits
 
     La generation du fichier XML contenant le flux RSS du podcast suit les recommandations de google disponibles ici :
     https://support.google.com/podcast-publishers/answer/9889544?hl=fr
@@ -257,12 +257,12 @@ def generate_xml(show_id):
 
 
         #SELECT row_number() over (order by ep.Date) as nbr,ep.Title, ep.Encoded_title, ep.Description, ep.Is_explicit, ep.Is_fully_owned FROM Episodes ep WHERE ep.`Show`=3 AND ep.Is_fully_owned >= 0
-        if request.args.get('is_fully_owned', default=True) == True: #Si on demande à ce que le résultat comporte exclusivement des podcasts dont on possède entierement les droits
-            is_fully_owned = 1
+        if request.args.get('display_on_third_platforms', default=True) == True: #Si on demande à ce que le résultat comporte exclusivement des podcasts dont on possède entierement les droits
+            display_on_third_platforms = 1
         else:
-            is_fully_owned = 0
+            display_on_third_platforms = 0
 
-        cursor.execute("SELECT row_number() over (order by ep.Date) as nbr,ep.Title, ep.Encoded_title, ep.Description, ep.Is_explicit, ep.Is_fully_owned, ep.Date, ep.File_length FROM Episodes ep WHERE ep.`Show`=%s AND ep.Is_fully_owned >= %s", (show_id, is_fully_owned))
+        cursor.execute("SELECT row_number() over (order by ep.Date) as nbr,ep.Title, ep.Encoded_title, ep.Description, ep.Is_explicit, ep.display_on_third_platforms, ep.Date, ep.File_length FROM Episodes ep WHERE ep.`Show`=%s AND ep.display_on_third_platforms >= %s", (show_id, display_on_third_platforms))
         ep_data = cursor.fetchone()
         while ep_data is not None:
             item = etree.SubElement(channel, "item")
