@@ -1,24 +1,29 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Formulaire d'upload</title>
-</head>
-<body>
-    <h2>Bienvenue sur le formulaire d'upload !</h2>
-    {% with messages = get_flashed_messages() %}
-    {% if messages %}
-        <ul class=flashes>
-        {% for message in messages %}
-            <li>{{ message }}</li>
-        {% endfor %}
-        </ul>
-    {% endif %}
-    {% endwith %}
-    <form action="/login" method="post" enctype=multipart/form-data>
-        <input type="text" name="username" placeholder="Utilisateur"><br>
-        <input type="text" name="password" placeholder="Mot de passe"><br>
-        <input type="submit" name="">
-    </form>
-</body>
-</html>
+{% extends 'base.html' %}
+
+{% block title %}Connexion{% endblock %}
+
+{% block content %}
+
+<div class="justify-content-center d-flex">
+<div class="col-md-6 shadow-lg p-5 bg-light mt-5">
+<h2 class="text-center">Bienvenue sur BananaPodcaster !</h2>
+<form action="/login" method="post" enctype=multipart/form-data>
+    <div class="mb-3 form-floating">
+        <input type="text" class="form-control" name="username" placeholder="Identifiant">
+        <label for="username">Identifiant</label>
+    </div>
+    <div class="mb-3 form-floating">
+        <input type="password" class="form-control" name="password" placeholder="Mot de passe">
+        <label for="password">Mot de passe</label>
+    </div>
+    <div class="d-grid gap-2 mb-3">
+        <button type="submit" class="btn btn-primary btn-block">Se connecter</button>
+    </div>
+</form>
+</div>
+</div>
+<script type="text/javascript">
+    var element = document.getElementById("nav-link-login");
+    element.classList.add("active");
+</script>
+{% endblock %}
