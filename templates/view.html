@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+
+{% block title %}Mon podcast{% endblock %}
+
+
+{% block header %}<h2>Mon podcast</h2>{% endblock %}
+{% block content %}
+
+<div class="row">
+	<div class="col-12 col-md-3 col-lg-2 p-3 justify-content-center d-flex">
+		<div class="d-flex align-items-center" style="height: 100%;">
+			<img class="mw-100 rounded-2 shadow-lg" src="{{ base_url }}/media/{{ data[2] }}/{{ data[3] }}/artwork.png">
+		</div>
+	</div>
+	<div class="col-12 col-md-9 p-3">
+		<div class="row h-100">
+			<div class="col-12 text-center text-md-start">
+				<h3 class="align-middle m-0 pt-2">{{ data[0] }}</h3>
+			</div>
+			<div class="col-12 text-center text-md-start">
+				<h5 class="text-muted">Un podcast de {{ data[1] }}</h4>
+			</div>
+			<div class="col-12">
+				<div class="row h-100 p-3 ps-0 pb-md-0 justify-content-start gy-3 gy-md-0">
+					<div class="col-12 col-md-3 d-grid">
+						<button class="btn btn-primary" type="button" onclick="location.href='/upload?show_id={{ show_id }}';">Nouvel épisode</button>
+					</div>
+					<div class="col-12 col-md-3 d-grid">
+						<button class="btn btn-primary" type="button">Edition du podcast</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+{% endblock %}
