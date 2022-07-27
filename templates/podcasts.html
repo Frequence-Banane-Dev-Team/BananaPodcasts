@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+
+{% block title %}Mes podcasts{% endblock %}
+
+
+{% block header %}<h2>Mes podcasts</h2>{% endblock %}
+{% block content %}
+<div class="row text-center mt-2">
+
+	{% for podcast in data: %}
+	<div class="col-6 col-md-3 col-lg-2 p-3">
+    	<div class="card" style="height: 100%;">
+  			<img src="{{ base_url }}/media/{{ podcast[2] }}/{{ podcast[3] }}/artwork.png" class="card-img-top" alt="...">
+  			<div class="card-body">
+  				<a href="/view/{{ podcast[4] }}" style="text-decoration: none; color: inherit;">
+    				<h5 class="card-title">{{ podcast[0] }}</h5>
+    				<h6 class="card-subtitle mb-2 text-muted" style="max-height: 50%; overflow: hidden;">{{ podcast[1] }}</h6>
+    			</a>
+  			</div>
+		</div>
+    </div>
+    {% endfor %}
+
+
+
+
+
+</div>
+<script type="text/javascript">
+    var element = document.getElementById("nav-link-podcasts");
+    element.classList.add("active");
+</script>
+{% endblock %}

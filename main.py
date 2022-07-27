@@ -44,7 +44,7 @@ NSMAP = {"itunes" : ITUNES_NAMESPACE}
 def auth_required(f):
     @wraps(f)
     def decorator(*args, **kwargs):
-        if 'username' in session:
+        if 'username' in session and 'id' in session:
             return f(*args, **kwargs)
         else:
             return redirect(url_for('login'))
@@ -80,7 +80,7 @@ def encode_string_for_filename(title):
 
 """
 
-@app.route('/')
+@app.route('/bonjour')
 @auth_required
 def hello():
     """
@@ -90,6 +90,28 @@ def hello():
     return "Bonjour " + session['username'] + " !"
 
 
+@app.route('/', methods=['GET'])
+@auth_required
+def podcasts():
+    conn = mysql.connect()
+    cursor =conn.cursor()
+    cursor.execute("SELECT sh.Title, un.Name, un.Encoded_name, sh.Encoded_title, sh.ID FROM Shows sh, Rights rt, Units un WHERE sh.Unit=un.ID AND sh.Unit = rt.Unit AND rt.User=%s AND rt.Level <=2", (session['id']) )
+    data = cursor.fetchall()
+    return render_template('podcasts.html', data=data, base_url=app.config['BASE_URL'])
+
+
+@app.route('/view/<int:show_id>', methods=['GET'])
+@auth_required
+def view(show_id):
+    conn = mysql.connect()
+    cursor =conn.cursor()
+    cursor.execute("SELECT sh.Title, un.Name, un.Encoded_name, sh.Encoded_title FROM Shows sh, Rights rt, Units un WHERE sh.ID=%s AND sh.Unit=un.ID AND sh.Unit = rt.Unit AND rt.User=%s AND rt.Level <=2", (show_id,session['id']) )
+    data = cursor.fetchone()
+    if data is None:
+        flash("Vous n'avez pas les droits d'accès suffisants !", 'danger')
+        return redirect(url_for('podcasts'))
+
+    return render_template('view.html', data=data, base_url=app.config['BASE_URL'], show_id=show_id)
 
 @app.route('/login', methods=['POST', 'GET'])
 def login():
@@ -103,7 +125,7 @@ def login():
             data = cursor.fetchone()
             if data is None:
                 flash('Identifiants / Mot de passe incorrect !', 'danger')
-                redirect(url_for('login'))
+                return redirect(url_for('login'))
 
             salt = data[0].encode()
             password = request.form['password'].encode()
@@ -113,13 +135,13 @@ def login():
             data = cursor.fetchone()
             if data is None:
                 flash('Identifiants / Mot de passe incorrect !', 'danger')
-                redirect(url_for('login'))
+                return redirect(url_for('login'))
 
-            session['ID'] = data[0]
+            session['id'] = data[0]
             session['username'] = data[1]
 
             flash('Vous êtes désormais connecté !', 'success')
-            return redirect(url_for('upload'))
+            return redirect(url_for('podcasts'))
 
 
 @app.route('/logout', methods=['GET'])
@@ -153,7 +175,7 @@ def upload():
         #On verifie si l'utilisateur à les droits sur le podcast 
         conn = mysql.connect()
         cursor =conn.cursor()
-        cursor.execute("SELECT sh.ID, rt.Level FROM Shows sh, Rights rt WHERE rt.User=%s and sh.ID=%s and rt.Unit=sh.Unit AND( (rt.Level <= 1) OR (rt.Level <= 2 AND (sh.Pin=%s  OR sh.Pin=Null) ) )",(session['ID'], form_data['show_id'], form_data['pin']) )
+        cursor.execute("SELECT sh.ID, rt.Level FROM Shows sh, Rights rt WHERE rt.User=%s and sh.ID=%s and rt.Unit=sh.Unit AND( (rt.Level <= 1) OR (rt.Level <= 2 AND (sh.Pin=%s  OR sh.Pin=Null) ) )",(session['id'], form_data['show_id'], form_data['pin']) )
         if cursor.fetchone() is None:
             flash("Vous n'avez pas les droits sur ce podcast ou votre code est incorrect !", 'danger')
             return redirect(redirection_upload_url) #TODO : rediriger vers la page avec la liste des podcasts plutot
@@ -258,7 +280,7 @@ def generate_xml(show_id):
         language= etree.SubElement(channel, "language")
         language.text = show_data[6]
         link= etree.SubElement(channel, "link")
-        link.text="https://podcasts.frequencebanane.ch/xml/" + str(show_id)
+        link.text= app.config['BASE_URL'] + "/xml/" + str(show_id)
 
 
         #SELECT row_number() over (order by ep.Date) as nbr,ep.Title, ep.Encoded_title, ep.Description, ep.Is_explicit, ep.Is_fully_owned FROM Episodes ep WHERE ep.`Show`=3 AND ep.Is_fully_owned >= 0
@@ -284,7 +306,7 @@ def generate_xml(show_id):
             #ep_pubDate.text = ep_data[6].strftime('%d %b %Y')
             ep_pubDate.text = ep_data[6].strftime('%a, %d %b %Y %I:%M:%S') + " +0200"
             ep_enclosure = etree.SubElement(item, "enclosure")
-            url = "https://podcasts.frequencebanane.ch/media/" + show_data[1] + "/" +show_data[4] + "/" + show_data[4] + "-" + str(ep_data[0]) + "-" + ep_data[2] + "-" + ep_data[6].strftime('%Y_%m_%d') + ".mp3"
+            url = app.config['BASE_URL'] + "/media/" + show_data[1] + "/" +show_data[4] + "/" + show_data[4] + "-" + str(ep_data[0]) + "-" + ep_data[2] + "-" + ep_data[6].strftime('%Y_%m_%d') + ".mp3"
             ep_enclosure.set("url", url)
             ep_guid = etree.SubElement(item, "guid")
             ep_guid.set("isPermaLink", "true")
