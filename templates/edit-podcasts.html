@@ -1,0 +1,117 @@
+    {% extends 'base.html' %}
+
+    {% block title %}Formulaire d'édition{% endblock %}
+    {% block header %}{% endblock %}
+
+    {% block content %}
+<div class="container mt-3">
+    <form action="/edit" method="post" enctype=multipart/form-data>
+        <h3>Général</h3>
+
+        <div class="border border-2 border-secondary rounded-2 p-2 ps-3 pe-3 mb-3">
+        <div class="mb-3">
+            <label for="sh_title">Titre du podcast</label>
+            <input type="text" class="form-control" name="sh_title" placeholder="La dose équivalente en banane" value="{{ data[0] }}">
+        </div>
+
+        <div class="mb-3">
+            <label for="sh_description">Description du podcast</label>
+            <textarea name="sh_description" class="form-control" placeholder="C'est l'histoire de toto qui faisait un podcast...">{{ data[4] }}</textarea>
+        </div>
+
+        <div class="mb-3">
+            <label for="file" class="">Image du podcast</label><br>
+            <input type=file class="form-control" name="sh_cover" onchange="loadFile(event)">            
+        </div>
+
+        <div class="row justify-content-center justify-content-md-start mb-3">
+            <div class="col-8 col-md-4">
+                <img src="{{ base_url }}/media/{{ data[2] }}/{{ data[1] }}/artwork.png" id="output" class="w-100 rounded-2">
+            </div>
+        </div>
+        <!--
+        <div class="mb-3">
+            <label for="sh_country">Langage principal du podcast</label>
+            <select class="form-select" id="sh_language" aria-label="Default select example">
+                <option value="fr" selected>fr</option>
+            </select>
+        </div>
+        
+
+        <div class="mb-3">
+            <label for="sh_country">Pays d'origine</label>
+            <select class="form-select" id="sh_country" aria-label="Default select example">
+                <option value="ch" selected>ch</option>
+            </select>
+        </div>
+        -->
+
+        </div>
+
+        <h3>Zone technique</h3>
+        <p>Là où se trouve les paramètres moins visibles du podcasts mais plutôt destiné à la gestion interne</p>
+        <div class="border border-2 border-secondary rounded-2 p-2 ps-3 pe-3 mb-3">
+        <div class="mb-3">
+            <label for="sh_unit">Unité du podcast</label>
+            <select class="form-select" name="sh_unit" aria-label="Default select example">
+                {% for unit in units: %}
+                <option value="{{ unit[0] }}" {% if (unit[0] == data[3]) %} selected {% endif %}>{{ unit[1] }}</option>
+                {% endfor %}
+            </select>
+            <div class="form-text">Les noms internes des unités sont affichées pour éviter les confusions. Le nom public sera donc différent. Attention cela ne déplace pas les fichiers !</div>
+            <input type="hidden" name="sh_id" value="{{ data[6] }}">
+        </div>
+
+
+
+        <div class="mb-3">
+            <label for="pin">Code d'accès du Podcast</label>
+            <input type="number" name="pin" inputmode="numeric" class="form-control" pattern="[0-9]{4}" maxlength="4" aria-describedby="pin_help" value="{{ data[5] }}">
+            <div class="form-text">Laisser vide pour un accès libre au podcast</div>
+        </div>
+
+        <div class="mb-3">
+            <button type="submit" class="btn btn-primary">{% if (data[6] is not none) %}Modifier le podcast{% else %}Créer le podcast{% endif %}</button>
+        </div>
+        </div>
+
+                
+    </form>
+
+    <h3>Zone de danger</h3>
+        <p>Du calme billy boy, est ce que tu es sûr de ce que tu vas faire ?</p>
+        <div class="mb-3 border border-2 border-danger rounded-2 p-2 ps-3 pe-3">
+            
+            <div class="row">
+                <div class="col-md-10 col-form-label">
+                    <div class="w-100">Supprimer le podcast</div>
+                    <div class="w-100 form-text">Attention cette action est irréversible</div>   
+                </div>
+                <div class="col-12 col-md-2">
+                    <div class="row h-100 align-items-center text-md-end text-center">
+                        <div class="col-12">
+                            <button onclick="" class="btn btn-danger btn-md" name="button-submit" id="DeleteButton">Supprimer</button>
+                        </div>
+                    </div>
+                    
+                </div>
+            </div>
+        </div>
+</div>
+<!--
+<script type="text/javascript">
+    var element = document.getElementById("nav-link-upload");
+    element.classList.add("active");
+</script>
+
+-->
+<script>
+  var loadFile = function(event) {
+    var output = document.getElementById('output');
+    output.src = URL.createObjectURL(event.target.files[0]);
+    output.onload = function() {
+      URL.revokeObjectURL(output.src) // free memory
+    }
+  };
+</script>
+    {% endblock %}
