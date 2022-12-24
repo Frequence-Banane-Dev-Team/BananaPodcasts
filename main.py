@@ -7,6 +7,7 @@ from unidecode import unidecode
 import hashlib
 import re
 import os
+import shutil
 
 
 from config import myconfig
@@ -95,7 +96,7 @@ def hello():
 def podcasts():
     conn = mysql.connect()
     cursor =conn.cursor()
-    cursor.execute("SELECT sh.Title, un.Name, un.Encoded_name, sh.Encoded_title, sh.ID FROM Shows sh, Rights rt, Units un WHERE sh.Unit=un.ID AND sh.Unit = rt.Unit AND rt.User=%s AND rt.Level <=2", (session['id']) )
+    cursor.execute("SELECT sh.Title, un.Name, un.Encoded_name, sh.Encoded_title, sh.ID FROM Shows sh, Rights rt, Units un WHERE sh.Unit=un.ID AND sh.Unit = rt.Unit AND rt.User=%s AND rt.Level <=3", (session['id']) )
     data = cursor.fetchall()
     return render_template('podcasts.html', data=data, base_url=app.config['BASE_URL'])
 
@@ -105,10 +106,10 @@ def podcasts():
 def view(show_id):
     conn = mysql.connect()
     cursor =conn.cursor()
-    cursor.execute("SELECT sh.Title, un.Name, un.Encoded_name, sh.Encoded_title FROM Shows sh, Rights rt, Units un WHERE sh.ID=%s AND sh.Unit=un.ID AND sh.Unit = rt.Unit AND rt.User=%s AND rt.Level <=2", (show_id,session['id']) )
+    cursor.execute("SELECT sh.Title, un.Name, un.Encoded_name, sh.Encoded_title, sh.Description, sh.ID FROM Shows sh, Rights rt, Units un WHERE sh.ID=%s AND sh.Unit=un.ID AND sh.Unit = rt.Unit AND rt.User=%s AND rt.Level <=3", (show_id,session['id']) )
     data = cursor.fetchone()
     if data is None:
-        flash("Vous n'avez pas les droits d'accès suffisants !", 'danger')
+        flash("Vous n'avez pas les droits d'accès suffisants pour accéder à ce podcast !", 'danger')
         return redirect(url_for('podcasts'))
 
     return render_template('view.html', data=data, base_url=app.config['BASE_URL'], show_id=show_id)
@@ -150,12 +151,92 @@ def logout():
     flash('Vous êtes désormais deconnecté !', 'success')
     return redirect(url_for('login'))
 
+
+@app.route('/edit', methods=['POST', 'GET'])
+@auth_required
+def edit_podcasts():
+    if request.method == 'GET':
+        if 'show_id' in request.args:
+            conn = mysql.connect()
+            cursor =conn.cursor()
+            cursor.execute("SELECT sh.ID, rt.Level FROM Shows sh, Rights rt WHERE rt.User=%s and sh.ID=%s and rt.Unit=sh.Unit AND( (rt.Level <= 1))",(session['id'], request.args.get('show_id', type=int)) )
+            if cursor.fetchone() is None:
+                flash("Vous n'avez pas les droits d'édition sur ce podcast, veuillez contacter la direction d'antenne !", 'danger')
+                return redirect(url_for('view', show_id=request.args.get('show_id', type=int)))
+            cursor.execute("SELECT sh.Title, sh.Encoded_title, un.Encoded_name, sh.Unit, sh.Description, sh.Pin, sh.ID FROM Shows sh, Units un WHERE sh.ID=%s and sh.Unit=un.ID", (request.args.get('show_id', type=int)))            
+            data = cursor.fetchone()
+
+            cursor.execute("SELECT un.ID, un.Encoded_name FROM Units un, Rights rt WHERE rt.User=%s and rt.Level <=1 and rt.Unit = un.ID", (session['id']))
+            units = cursor.fetchall()
+            return render_template('edit-podcasts.html', data=data, units=units, base_url=app.config['BASE_URL'])
+    if request.method == 'POST':
+        redirection_edit_url = url_for('edit_podcasts', show_id= request.form.get('sh_id', default=0, type=int))
+        keys = ['sh_title', 'sh_description', 'sh_unit' , 'pin', 'sh_id']
+        keys_types = [str, str, int, int, int]
+
+        form_data = {}
+        for key, key_type in zip(keys, keys_types):
+            form_data[key] = request.form.get(key, default=None, type=key_type)#recupere les données envoyés par l'utilisateur (contenu dans le dictionnaire request.form) en les formattant dans le bon type de variable
+         
+        form_data['sh_encoded_title'] = encode_string_for_filename(form_data['sh_title']) 
+        keys.append('sh_encoded_title')
+        form_data['sh_language'] = 'fr'
+        keys.append('sh_language')
+        form_data['sh_countries'] = None
+        keys.append('sh_countries')
+
+        conn = mysql.connect()
+        cursor =conn.cursor()
+        
+        cursor.execute("SELECT sh.ID, rt.Level, un.Encoded_name, sh.Encoded_title , sh.Unit FROM Shows sh, Rights rt, Units un WHERE rt.User=%s and sh.ID=%s and rt.Unit=sh.Unit AND sh.Unit=un.ID AND( (rt.Level <= 1))",(session['id'], form_data['sh_id']) )
+        data = cursor.fetchone()
+        if (data is None):
+            flash("Erreur, vous n'avez pas les droits pour modifier ce podcast, veuillez contacter la direction d'antenne !", 'danger')
+            return redirect(redirection_edit_url)
+
+        cursor.execute("UPDATE Shows SET Unit=%s, Title=%s , Encoded_title=%s, Description=%s, Language=%s, Countries=%s, Pin=%s WHERE ID=%s", (form_data['sh_unit'], form_data['sh_title'], form_data['sh_encoded_title'], form_data['sh_description'], form_data['sh_language'], form_data['sh_countries'], form_data['pin'], form_data['sh_id']))
+        conn.commit()
+
+
+        folder_path_old = os.path.join(app.config['FILEPATH'], data[2], data[3])
+        if (data[4] != form_data['sh_unit']) or (data[3] != form_data['sh_encoded_title']):
+
+            cursor.execute('SELECT sh.Encoded_title, un.Encoded_name FROM Shows sh, Units un WHERE sh.Unit=un.ID AND sh.ID=%s', (form_data['sh_id']))
+            data = cursor.fetchone()
+            folder_path_new = os.path.join(app.config['FILEPATH'], data[1], data[0])
+            
+            if not os.path.exists(folder_path_new):
+                os.makedirs(folder_path_new)
+            shutil.move(folder_path_old, folder_path_new)
+
+        if 'sh_cover' in request.files:
+            file = request.files['sh_cover']
+            if file.filename != '':
+                if file.filename.rsplit('.', 1)[-1].lower() != 'png':
+                    flash('Fichier vide ou format d\'image incorrect (.png seulement)!', 'danger')
+                    return redirect(redirection_edit_url)
+                if not os.path.exists(folder_path_old):
+                    os.makedirs(folder_path_old)
+                file.save(os.path.join(folder_path_old, 'artwork.png'))
+            
+        flash('Podcast modifié', 'success')
+        return redirect(redirection_edit_url)
+
+
+
 @app.route('/upload', methods=['POST', 'GET'])
 @auth_required
 def upload():
 
     if request.method == 'GET':
-        return render_template('upload.html')
+        conn = mysql.connect()
+        cursor =conn.cursor()
+        cursor.execute("SELECT sh.ID, rt.Level FROM Shows sh, Rights rt WHERE rt.User=%s and sh.ID=%s and rt.Unit=sh.Unit AND( (rt.Level <= 2))",(session['id'], request.args.get('show_id',default=None, type=int)) )
+        if cursor.fetchone() is None:
+            flash("Vous n'avez pas les droits d'édition sur ce podcast, veuillez contacter la direction d'antenne !", 'danger')
+            return redirect(url_for('view', show_id=request.args.get('show_id', type=int)))
+
+        return render_template('upload.html') #utilise request.args.get('show_id') directement dans le template
     else:
         
         redirection_upload_url = url_for('upload', show_id= request.form.get('show_id', default='0'))
@@ -203,32 +284,44 @@ def upload():
            return redirect(redirection_upload_url)
         
         file = request.files['file']
-        if file.filename == '' or file.filename.rsplit('.', 1)[1].lower() != 'mp3':
+        if file.filename == '' or file.filename.rsplit('.', 1)[-1].lower() != 'mp3':
            flash('Fichier vide ou format de fichier incorrect (.mp3 seulement)!', 'danger')
            return redirect(redirection_upload_url)
          
         
+        if 'artwork' in request.files:
+            artwork_file = request.files['artwork']
+            if artwork_file.filename != '':
+                if artwork_file.filename.rsplit('.', 1)[-1].lower() != 'png':
+                    flash('Format d\'incorrect (.png seulement)!', 'danger')
+                    return redirect(redirection_upload_url)
+                form_data['image'] = 1
+        else:
+            form_data['image'] = 0
+
         form_data['file_length'] = 0
-        form_data['image'] = 0
+        
         keys.append('file_length')
         keys.append('image')
         print(keys)
 
         
-        cursor.execute("INSERT INTO Episodes (Episodes.Title, Episodes.Description, Episodes.Keywords, Episodes.display_on_third_platforms, Episodes.display_on_website, Episodes.Date, Episodes.Is_explicit, Episodes.Show, Episodes.Encoded_title, Episodes.File_length, Episodes.image) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);", tuple(map(form_data.get, keys)) )
+        cursor.execute("INSERT INTO Episodes (Episodes.Title, Episodes.Description, Episodes.Keywords, Episodes.display_on_third_platforms, Episodes.display_on_website, Episodes.Date, Episodes.Is_explicit, Episodes.Show, Episodes.Encoded_title, Episodes.File_length, Episodes.custom_artwork) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);", tuple(map(form_data.get, keys)) )
         conn.commit()
 
         cursor.execute("SELECT *  FROM (SELECT un.Encoded_name, sh.Encoded_title as sh_title, row_number() over (order by ep.ID) as ep_rn, ep.ID, ep.Encoded_title, ep.Date FROM Episodes ep, Shows sh, Units un WHERE ep.`Show` = sh.ID and sh.Unit=un.ID and sh.ID =%s) output_tb where output_tb.ID = %s", (form_data['show_id'] ,cursor.lastrowid))
         filename_data = cursor.fetchone()
-        filename = filename_data[1] + "-" + str(filename_data[2]) + "-" + filename_data[4] + "-" + filename_data[5].strftime('%Y_%m_%d') + ".mp3"
-        print(filename)
+        filename_base = filename_data[1] + "-" + str(filename_data[2]) + "-" + filename_data[4] + "-" + filename_data[5].strftime('%Y_%m_%d')
 
-        folder_path = os.path.join('/var/www/media', filename_data[0], filename_data[1])
+        print(filename_base)
+
+        folder_path = os.path.join(app.config['FILEPATH'], filename_data[0], filename_data[1])
         print(folder_path)
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
         
-        file.save(os.path.join(folder_path, filename))
+        file.save(os.path.join(folder_path, filename_base+'.mp3'))
+        artwork_file.save(os.path.join(folder_path, filename_base+'.png'))
         flash('Podcast uploadé avec succès !', 'success')
         return redirect(redirection_upload_url)
 
@@ -294,7 +387,7 @@ def generate_xml(show_id):
         else:
             display_on_website = 0
 
-        cursor.execute("SELECT row_number() over (order by ep.Date) as nbr,ep.Title, ep.Encoded_title, ep.Description, ep.Is_explicit, ep.display_on_third_platforms, ep.Date, ep.File_length FROM Episodes ep WHERE ep.`Show`=%s AND ep.display_on_third_platforms >= %s AND ep.display_on_website >= %s ", (show_id, display_on_third_platforms, display_on_website))
+        cursor.execute("SELECT row_number() over (order by ep.Date) as nbr,ep.Title, ep.Encoded_title, ep.Description, ep.Is_explicit, ep.display_on_third_platforms, ep.Date, ep.File_length, ep.custom_artwork FROM Episodes ep WHERE ep.`Show`=%s AND ep.display_on_third_platforms >= %s AND ep.display_on_website >= %s ", (show_id, display_on_third_platforms, display_on_website))
         ep_data = cursor.fetchone()
         while ep_data is not None:
             item = etree.SubElement(channel, "item")
@@ -302,6 +395,9 @@ def generate_xml(show_id):
             ep_title.text = ep_data[1]
             ep_description = etree.SubElement(item, "description")
             ep_description.text = ep_data[3]
+            if ep_data[8] == 1:
+                ep_artwork = etree.SubElement(item, ITUNES + "image")
+                ep_artwork.text = app.config['BASE_URL'] + "/media/" + show_data[1] + "/" +show_data[4] + "/" + show_data[4] + "-" + str(ep_data[0]) + "-" + ep_data[2] + "-" + ep_data[6].strftime('%Y_%m_%d') + ".png"
             ep_pubDate = etree.SubElement(item, "pubDate")
             #ep_pubDate.text = ep_data[6].strftime('%d %b %Y')
             ep_pubDate.text = ep_data[6].strftime('%a, %d %b %Y %I:%M:%S') + " +0200"

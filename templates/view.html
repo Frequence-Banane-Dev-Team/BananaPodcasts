@@ -18,7 +18,10 @@
 				<h3 class="align-middle m-0 pt-2">{{ data[0] }}</h3>
 			</div>
 			<div class="col-12 text-center text-md-start">
-				<h5 class="text-muted">Un podcast de {{ data[1] }}</h4>
+				<h5 class="text-muted">Un podcast de {{ data[1] }}</h5>
+			</div>
+			<div class="col-12 text-center text-md-start">
+				<h6 class="line-clamp text-muted">{{ data[4] }}</h6>
 			</div>
 			<div class="col-12">
 				<div class="row h-100 p-3 ps-0 pb-md-0 justify-content-start gy-3 gy-md-0">
@@ -26,7 +29,7 @@
 						<button class="btn btn-primary" type="button" onclick="location.href='/upload?show_id={{ show_id }}';">Nouvel épisode</button>
 					</div>
 					<div class="col-12 col-md-3 d-grid">
-						<button class="btn btn-primary" type="button">Edition du podcast</button>
+						<button class="btn btn-primary" type="button" onclick="location.href='/edit?show_id={{ show_id }}'" >Edition du podcast</button>
 					</div>
 				</div>
 			</div>
@@ -34,4 +37,71 @@
 	</div>
 </div>
 
+<br>
+<h2>Liste des épisodes</h2>
+<div class="row">
+	<div class="col-12 border-bottom">
+		<div class="row">
+			<div class="col-3 col-md-2 col-lg-1 p-3">
+				<div class="d-flex align-items-start player-container" style="height: 100%; position: relative;">
+					<svg class="ep_player_icon" xmlns="http://www.w3.org/2000/svg" fill="currentColor" class="bi bi-play-fill" viewBox="0 0 16 16" onclick="toggleAudio(this.nextElementSibling)">
+  						<path d="m11.596 8.697-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/>
+					</svg>
+					<audio src="https://podcasts.frequencebanane.ch/media/frequence_banane/frequence_banane_en_festivals/frequence_banane_en_festivals-1-frequence_banane_a_paleo_jour__-2022_07_19.mp3"></audio>
+					<img class="mw-100 rounded-2 shadow-lg ep_cover" src="{{ base_url }}/media/{{ data[2] }}/{{ data[3] }}/artwork.png" >
+				</div>
+			</div>
+			<div class="col-3 p-3">
+				<div class="d-flex align-items-start h-100">
+					<h6 class="w-100 text-start">Fréquence Banane à Paléo, Jour 1</h6>
+				</div>
+			</div>
+			<div class="col-6 p-3">
+				<div class="d-flex align-items-start h-100">
+					<span class="w-100 text-start line-clamp" onclick="this.classList.toggle('line-clamp');">Lorem ipsum dolor sit amet, consectetur adipiscing elit. Quisque metus turpis, sollicitudin nec suscipit id, pharetra in mauris. Duis dictum malesuada tortor maximus suscipit. Lorem ipsum dolor sit amet, consectetur adipiscing elit. Duis aliquam dignissim nunc quis tempus. Maecenas tempus, lectus at molestie pretium, lorem purus congue erat, blandit cursus eros risus viverra risus. Morbi consequat nibh ipsum. Cras non dapibus ex.</span>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<style type="text/css">
+	.line-clamp{
+		display: -webkit-box;
+  		-webkit-line-clamp: 3;
+  		-webkit-box-orient: vertical;  
+  		overflow: hidden;
+	}
+	audio { display:none;}
+
+	.ep_player_icon{
+		position: absolute;
+		display: block;
+		width: 100%;
+		color: white;
+		transition-duration: 0.3s;
+		opacity: 0;
+		z-index: 10;
+	}
+
+	.ep_cover{
+		transition-duration: 0.3s;
+		z-index: 1;
+	}
+
+	.player-container:hover .ep_cover{
+		filter:brightness(30%);
+	}
+	.player-container:hover .ep_player_icon{
+		opacity: 1;
+	}
+	
+	
+
+</style>
+
+<script type="text/javascript">
+	function isPlaying(audelem) { return !audelem.paused; }
+	function toggleAudio(audelem) {isPlaying(audelem) ? audelem.pause() : audelem.play();}
+</script>
 {% endblock %}
